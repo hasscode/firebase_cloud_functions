@@ -81,6 +81,13 @@ def set_student_running_status(req: https_fn.Request) -> https_fn.Response:
     db = firestore.client()
     return set_student_running_status(req, db)
 
+
+@https_fn.on_request()
+def set_student_profile(req: https_fn.Request) -> https_fn.Response:
+    from src.set_student_profile import set_student_profile
+    db = firestore.client()
+    return set_student_profile(req, db)    
+
 # دالة يدوية لتجربة محرك الأولويات عبر HTTP (اختياري)
 @https_fn.on_request()
 def manual_task_priority_engine(req: https_fn.Request) -> https_fn.Response:
