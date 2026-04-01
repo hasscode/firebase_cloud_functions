@@ -10,31 +10,20 @@ def getTasks(req, db):
         course_id   = data.get("courseId")
         status      = data.get("progressStatus")
 
-        # 🔥 default = True (important for AI)
-        sort_by_priority = data.get("sortByPriority", True)
-        limit            = data.get("limit")
+        deprioritize_optional = data.get("deprioritizeOptionalTasks", False)
+        limit = data.get("limit")
 
         if not student_uid:
             return jsonify({"error": "studentUid is required"}), 400
 
+        # 1️⃣ Query
         query = db.collection("tasks").where("studentUid", "==", student_uid)
 
-        # optional filters
         if course_id:
-            query = query.where("courseId", "==", course_id)
+            query = query.where("scheduledCourseId", "==", course_id)
 
         if status:
-            query = query.where("progressStatus", "==", status)
-
-        # 🔥 FIXED sorting logic
-        if sort_by_priority:
-            query = query.order_by("priorityScore", direction=firestore.Query.DESCENDING)
-        else:
-            query = query.order_by("createdAt", direction=firestore.Query.DESCENDING)
-
-        # pagination / limit
-        if limit:
-            query = query.limit(limit)
+            query = query.where("taskStatus", "==", status)
 
         docs = query.stream()
 
@@ -43,6 +32,34 @@ def getTasks(req, db):
             task = doc.to_dict()
             task["id"] = doc.id
             tasks.append(task)
+
+        # 2️⃣ Sorting logic
+        def sort_key(task):
+            priority = task.get("taskPriority", "").lower()
+            is_optional = task.get("isOptional", False)
+
+            order = task.get("courseTaskOrder", 9999)
+            task_id = task.get("scheduledTaskId", "")
+
+           
+            is_critical = priority in ["critical", "verycritical"]
+
+       
+            if is_critical:
+                bucket = 0
+            elif deprioritize_optional and is_optional:
+                bucket = 2
+            else:
+                bucket = 1
+
+            # 🧠 final sort tuple
+            return (bucket, order, task_id)
+
+        tasks.sort(key=sort_key)
+
+        # 3️⃣ Limit
+        if limit:
+            tasks = tasks[:limit]
 
         return jsonify({
             "success": True,

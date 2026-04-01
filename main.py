@@ -12,20 +12,18 @@ if not firebase_admin._apps:
 # هذه الدوال تعمل تلقائياً في الخلفية عند إضافة أو تعديل أي Task
 # =========================================================
 
-from src.task_priority_engine import (
-    on_task_create, 
-    on_task_update, 
-    recalculate_all_tasks_daily
-)
+# from src.task_priority_engine import (
+#     on_task_create, 
+#     on_task_update, 
+#     recalculate_all_tasks_daily
+# )
 
-# تصدير المشغلات لكي يتعرف عليها Firebase عند الـ Deploy
-task_priority_on_create = on_task_create
-task_priority_on_update = on_task_update
-task_priority_daily_sync = recalculate_all_tasks_daily
+# # تصدير المشغلات لكي يتعرف عليها Firebase عند الـ Deploy
+# task_priority_on_create = on_task_create
+# task_priority_on_update = on_task_update
+# task_priority_daily_sync = recalculate_all_tasks_daily
 
-# =========================================================
-# 🔹 2. دوال الطلبات (HTTP Functions)
-# =========================================================
+
 
 @https_fn.on_request()
 def get_tasks(req: https_fn.Request) -> https_fn.Response:
@@ -33,11 +31,11 @@ def get_tasks(req: https_fn.Request) -> https_fn.Response:
     db = firestore.client()
     return getTasks(req, db)
 
-@https_fn.on_request()
-def update_tasks(req: https_fn.Request) -> https_fn.Response:
-    from src.update_tasks import upsertStudentTask
-    db = firestore.client()
-    return upsertStudentTask(req, db)
+# @https_fn.on_request()
+# def update_tasks(req: https_fn.Request) -> https_fn.Response:
+#     from src.update_task import upsertStudentTask
+#     db = firestore.client()
+#     return upsertStudentTask(req, db)
 
 @https_fn.on_request()
 def get_courses(req: https_fn.Request) -> https_fn.Response:
@@ -46,10 +44,58 @@ def get_courses(req: https_fn.Request) -> https_fn.Response:
     return getCourses(req, db)
 
 @https_fn.on_request()
+def get_quizzes(req: https_fn.Request) -> https_fn.Response:
+    from src.get_quizzes import getQuizzes
+    db = firestore.client()
+    return getQuizzes(req, db)    
+
+@https_fn.on_request()
+def update_quiz(req: https_fn.Request) -> https_fn.Response:
+    from src.update_quiz import updateQuiz
+    db = firestore.client()
+    return updateQuiz(req, db)  
+
+@https_fn.on_request()
+def get_quiz_answer(req: https_fn.Request) -> https_fn.Response:
+    from src.get_quiz_answer import getQuizAnswers
+    db = firestore.client()
+    return getQuizAnswers(req, db)
+
+@https_fn.on_request()
+def create_quiz_answer(req: https_fn.Request) -> https_fn.Response:
+    from src.create_quiz_answer import createQuizAnswer
+    db = firestore.client()
+    return createQuizAnswer(req, db) 
+
+@https_fn.on_request()
+def create_flashcard(req: https_fn.Request) -> https_fn.Response:
+    from src.create_flashcard import createFlashcardSet
+    db = firestore.client()
+    return createFlashcardSet(req, db) 
+
+@https_fn.on_request()
+def get_flashcard(req: https_fn.Request) -> https_fn.Response:
+    from src.get_flashcard import getFlashcards
+    db = firestore.client()
+    return getFlashcards(req, db) 
+
+@https_fn.on_request()
+def update_flashcard(req: https_fn.Request) -> https_fn.Response:
+    from src.update_flashcards import updateFlashcards
+    db = firestore.client()
+    return updateFlashcards(req, db)     
+
+@https_fn.on_request()
 def create_tasks(req: https_fn.Request) -> https_fn.Response:
     from src.create_tasks import createTasks
     db = firestore.client()
     return createTasks(req, db)
+
+@https_fn.on_request()
+def create_quiz(req: https_fn.Request) -> https_fn.Response:
+    from src.create_quiz import createQuiz
+    db = firestore.client()
+    return createQuiz(req, db)
 
 @https_fn.on_request()
 def create_course(req: https_fn.Request) -> https_fn.Response:
