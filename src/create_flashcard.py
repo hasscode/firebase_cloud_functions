@@ -1,27 +1,28 @@
 from flask import jsonify
+from google.cloud import firestore
 
-def createFlashcardSet(req, db):
+def createFlashcardSet(req, db: firestore.Client):
     try:
-        data = req.get_json()
+        data = req.get_json(silent=True) or {}
 
-        quiz_meta = data.get("quizMeta")
-        questions = data.get("questions")
+        flashcard_id = data.get("quizInstanceId")
+  
+        flashcard_data = data.get("flashcards")
 
-        if not quiz_meta or not questions:
-            return jsonify({"error": "quizMeta and questions required"}), 400
-
-        flashcard_id = quiz_meta.get("quizInstanceId")
-
-        if not flashcard_id:
-            return jsonify({"error": "quizInstanceId required in quizMeta"}), 400
+        if not flashcard_id or not flashcard_data:
+            return jsonify({"error": "quizInstanceId and flashcards object are required"}), 400
 
         doc_ref = db.collection("flashcards").document(flashcard_id)
 
-        doc_ref.set(data)
+      
+        doc_ref.set({
+            "quizInstanceId": flashcard_id,
+            "flashcards": flashcard_data
+        })
 
         return jsonify({
             "success": True,
-            "id": flashcard_id
+            "quizInstanceId": flashcard_id
         })
 
     except Exception as e:

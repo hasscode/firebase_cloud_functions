@@ -1,38 +1,43 @@
 from flask import jsonify
+from google.cloud import firestore
 
-def getFlashcards(req, db):
+def getFlashcards(req, db: firestore.Client):
     try:
         data = req.get_json(silent=True) or {}
-
         flashcard_id = data.get("quizInstanceId")
 
         if flashcard_id:
             doc = db.collection("flashcards").document(flashcard_id).get()
 
             if not doc.exists:
-                return jsonify({"error": "not found"}), 404
+                return jsonify({"error": "Flashcards not found"}), 404
 
-            result = doc.to_dict()
-            result["id"] = doc.id
+            doc_data = doc.to_dict()
 
             return jsonify({
                 "success": True,
-                "data": result
+                "quizInstanceId": flashcard_id,
+                "flashcards": doc_data.get("flashcards", {}) # هترجع nested ومش flat
             })
 
-        # get all
-        docs = db.collection("flashcards").stream()
+        # ====================================
+        # 🔹 Get list of Flashcards
+        # ====================================
+        limit = data.get("limit", 10)
+        docs = db.collection("flashcards").limit(limit).stream()
 
         results = []
         for doc in docs:
-            item = doc.to_dict()
-            item["id"] = doc.id
-            results.append(item)
+            d = doc.to_dict()
+            results.append({
+                "quizInstanceId": d.get("quizInstanceId"),
+                "flashcards": d.get("flashcards", {})
+            })
 
         return jsonify({
             "success": True,
             "count": len(results),
-            "data": results
+            "flashcards": results
         })
 
     except Exception as e:

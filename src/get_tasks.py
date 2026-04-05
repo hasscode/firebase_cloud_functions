@@ -52,7 +52,7 @@ def getTasks(req, db):
             else:
                 bucket = 1
 
-            # 🧠 final sort tuple
+       
             return (bucket, order, task_id)
 
         tasks.sort(key=sort_key)

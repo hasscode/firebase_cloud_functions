@@ -14,7 +14,6 @@ def getStudentRunningStatus(req, db: firestore.Client):
         
         query = db.collection("student_running_status") \
                   .where("studentUid", "==", student_uid) \
-                  .where("isActive", "==", True) \
                   .limit(1)
 
         docs = query.stream()

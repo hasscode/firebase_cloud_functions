@@ -1,37 +1,48 @@
 from flask import jsonify
 from google.cloud import firestore
 
-def createQuiz(req, db: firestore.Client):
+
+def getQuizzes(req, db: firestore.Client):
     try:
-        data = req.get_json()
+        data = req.get_json(silent=True) or {}
 
-        if not data:
-            return jsonify({"error": "Missing request body"}), 400
+        quiz_id = data.get("quizInstanceId")
 
-        quiz_meta = data.get("quizMeta")
-        questions = data.get("questions")
+       
+        if quiz_id:
+            doc = db.collection("quizzes").document(quiz_id).get()
 
-        if not quiz_meta or not questions:
-            return jsonify({"error": "quizMeta and questions are required"}), 400
+            if not doc.exists:
+                return jsonify({"error": "Quiz not found"}), 404
 
-        quiz_id = quiz_meta.get("quizInstanceId")
+            doc_data = doc.to_dict()
 
-        if not quiz_id:
-            return jsonify({"error": "quizInstanceId is required"}), 400
+            return jsonify({
+                "success": True,
+                "quizInstanceId": quiz_id,
+                "quiz": doc_data.get("quiz", {})  # 👈 رجع الـ JSON زي ما هو
+            })
 
-        doc_ref = db.collection("quizzes").document(quiz_id)
+        # =========================
+        # 🔹 Get list of quizzes
+        # =========================
+        limit = data.get("limit", 10)
 
-        doc_ref.set({
-            "quizMeta": quiz_meta,
-            "questions": questions,
-            "createdAt": firestore.SERVER_TIMESTAMP,
-            "updatedAt": firestore.SERVER_TIMESTAMP
-        })
+        docs = db.collection("quizzes").limit(limit).stream()
+
+        quizzes = []
+        for doc in docs:
+            d = doc.to_dict()
+
+            quizzes.append({
+                "quizInstanceId": d.get("quizInstanceId"),
+                "quiz": d.get("quiz", {})
+            })
 
         return jsonify({
             "success": True,
-            "message": "Quiz created successfully",
-            "quizInstanceId": quiz_id
+            "count": len(quizzes),
+            "quizzes": quizzes
         })
 
     except Exception as e:
