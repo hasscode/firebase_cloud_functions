@@ -1,6 +1,6 @@
-#  AI Students — Cloud Functions & MCP Tools Layer
+#  AI Students — Firebase Cloud Functions
 
-A backend system that connects AI agents to Firestore through structured, validated Cloud Functions. Built with **Python (Flask)** on **Firebase Cloud Functions (2nd Gen)** and exposed to AI agents via an **MCP (Model Context Protocol) server**.
+A backend system that connects AI agents to Firestore through structured, validated Cloud Functions. Built with **Python (Flask)** on **Firebase Cloud Functions (2nd Gen)**.
 
 ---
 
@@ -9,32 +9,28 @@ A backend system that connects AI agents to Firestore through structured, valida
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
+- [What's New](#whats-new)
 - [Cloud Functions](#cloud-functions)
   - [Tasks](#tasks)
   - [Courses](#courses)
   - [Students](#students)
   - [Running Status](#running-status)
-- [MCP Server](#mcp-server)
+  - [Quizzes](#quizzes)
+  - [Flashcards](#flashcards)
+  - [Priority Engine](#priority-engine)
 - [Data Schemas](#data-schemas)
 - [Priority System](#priority-system)
 - [Deployment](#deployment)
-- [Environment Variables](#environment-variables)
 
 ---
 
 ## Overview
 
-This layer acts as a **controlled bridge** between AI agents and Firestore. Instead of letting AI access the database directly, we expose structured tools with validation rules and field protection.
+This layer acts as a **controlled bridge** between AI agents and Firestore. Instead of letting AI access the database directly, we expose structured HTTP endpoints with validation rules and field protection.
 
 ```
 User → AI Agent → MCP Tools → Cloud Functions → Firestore
 ```
-
-**Why this approach?**
-- AI understands available actions through structured tool definitions
-- Incoming data is validated (required fields, enums, immutable field protection)
-- Database operations are auditable and consistent
-- Schema is enforced at the function level
 
 ---
 
@@ -48,23 +44,19 @@ User → AI Agent → MCP Tools → Cloud Functions → Firestore
                        │ MCP Tool Calls
 ┌──────────────────────▼──────────────────────────────────┐
 │                    MCP Server (Node.js)                  │
-│              Express + StreamableHTTP Transport           │
+│              Express + StreamableHTTP Transport          │
 │                     Hosted on Cloud Run                  │
 └──────────────────────┬──────────────────────────────────┘
-                       │ HTTP Requests
+                       │ HTTP POST Requests
 ┌──────────────────────▼──────────────────────────────────┐
 │             Firebase Cloud Functions (Python)            │
 │                  Flask · 2nd Gen · GCP                   │
-│                                                          │
-│   get_tasks  create_tasks  update_tasks                  │
-│   get_courses  create_course  update_course              │
-│   get_student_profile  get/set_student_running_status    │
 └──────────────────────┬──────────────────────────────────┘
                        │ Firestore SDK
 ┌──────────────────────▼──────────────────────────────────┐
-│                  Cloud Firestore                         │
-│   tasks · courses · students · student_running_status   │
-│   courseCurriculum · courseCurriculum                    │
+│                     Cloud Firestore                      │
+│  tasks · courses · students · student_running_status    │
+│  quizzes · quiz_answers · flashcards · courseCurriculum │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -73,28 +65,63 @@ User → AI Agent → MCP Tools → Cloud Functions → Firestore
 ## Project Structure
 
 ```
-functions/
-├── main.py                        # Entry point — registers all Cloud Functions
+firebase_cloud_functions/
+├── main.py                            # Entry point — registers all Cloud Functions
+├── requirements.txt
 └── src/
-    ├── create_tasks.py            # Generate tasks from curriculum
-    ├── get_tasks.py               # Fetch student tasks
-    ├── update_tasks.py            # Update task fields (validated)
-    ├── create_course.py           # Create a scheduled course document
-    ├── get_courses.py             # Fetch courses for a student
-    ├── update_course.py           # Update course fields (validated)
-    ├── get_student_profile.py     # Fetch student profile by email
+    ├── create_tasks.py                # Generate tasks from curriculum
+    ├── get_tasks.py                   # Fetch student tasks
+    ├── create_course.py               # Create a scheduled course
+    ├── get_courses.py                 # Fetch courses for a student
+    ├── update_course.py               # Update course fields (validated)
+    ├── get_student_profile.py         # Fetch student profile by email
+    ├── set_student_profile.py         # Save/update student profile      🆕
     ├── get_student_running_status.py  # Get active running status
-    └── set_student_running_status.py  # Save running status
-
-mcp-server/
-└── index.js                       # MCP server — exposes all tools to AI agents
+    ├── set_student_running_status.py  # Save running status
+    ├── create_quiz.py                 # Create a quiz document           🆕
+    ├── update_quiz.py                 # Update quiz fields               🆕
+    ├── get_quizzes.py                 # Fetch quiz by ID or list         🆕
+    ├── create_quiz_answer.py          # Save student quiz answers        🆕
+    ├── get_quiz_answer.py             # Fetch quiz answers               🆕
+    ├── create_flashcard.py            # Create a flashcard set           🆕
+    ├── update_flashcards.py           # Update flashcard set             🆕
+    ├── get_flashcard.py               # Fetch flashcard by ID or list    🆕
+    └── task_priority_engine.py        # Priority calculation logic       🆕
 ```
+
+---
+
+## What's New
+
+Compared to the previous version, the following functions were **added**:
+
+| Function | Description |
+|---|---|
+| `set_student_profile` | Save or update student profile document |
+| `create_quiz` | Create a new quiz with questions |
+| `update_quiz` | Update quiz metadata or questions |
+| `get_quizzes` | Fetch a single quiz or list quizzes |
+| `create_quiz_answer` | Submit student answers for a quiz |
+| `get_quiz_answer` | Retrieve answers by student or quiz |
+| `create_flashcard` | Create a flashcard set |
+| `update_flashcard` | Update an existing flashcard set |
+| `get_flashcard` | Fetch a flashcard set |
+| `manual_task_priority_engine` | Manually test the priority calculation |
+
+The following are currently **commented out** (disabled):
+
+| Function | Status |
+|---|---|
+| `update_tasks` | Under revision |
+| Background priority triggers | Pending re-enable after testing |
 
 ---
 
 ## Cloud Functions
 
-All functions are registered in `main.py` and use the **Firebase Functions Python SDK (2nd Gen)**.
+All functions accept `POST` requests with a JSON body.
+
+---
 
 ### Tasks
 
@@ -103,16 +130,15 @@ All functions are registered in `main.py` and use the **Firebase Functions Pytho
 Reads the course curriculum from `courseCurriculum/{courseId}` and generates `StudentSchedule-2.2` task documents in the `tasks` collection.
 
 **Request Body:**
-```json
-{
-  "studentUid": "STU_0001",
-  "courseId": "MATH-S1",
-  "scheduledCourseId": "MATH-S1-STU_0001",
-  "timezone": "Africa/Cairo",
-  "weekStartAt": "2026-03-17T00:00:00Z",
-  "weekEndAt": "2026-03-23T23:59:59Z"
-}
-```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `studentUid` | string | ✅ | Student identifier |
+| `courseId` | string | ✅ | Must match a doc in `courseCurriculum` |
+| `scheduledCourseId` | string | optional | Links task to a course dashboard |
+| `timezone` | string | optional | Default: `"UTC"` |
+| `weekStartAt` | ISO 8601 string | optional | Start of the week window |
+| `weekEndAt` | ISO 8601 string | optional | End of the week window |
 
 **Response:**
 ```json
@@ -129,56 +155,25 @@ Reads the course curriculum from `courseCurriculum/{courseId}` and generates `St
 
 #### `POST /get_tasks`
 
-Fetches tasks for a student with optional filters.
+Fetches tasks for a student with optional filters and sorting.
 
 **Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `studentUid` | string | ✅ | Student identifier |
+| `scheduledCourseId` | string | optional | Filter by course |
+| `taskStatus` | string | optional | `available` / `inProgress` / `completed` / `paused` / `skipped` |
+| `sortByPriority` | boolean | optional | Default: `true` — sorts by `priorityScore` descending |
+| `limit` | integer | optional | Max results to return |
+
+**Response:**
 ```json
 {
-  "studentUid": "STU_0001",
-  "courseId": "MATH-S1",
-  "progressStatus": "notStarted"
+  "success": true,
+  "tasksCount": 5,
+  "tasks": [ { "scheduledTaskId": "...", "taskStatus": "available", ... } ]
 }
-```
-
-**Filters:**
-| Field | Required | Description |
-|---|---|---|
-| `studentUid` | ✅ | Student identifier |
-| `courseId` | optional | Filter by course |
-| `progressStatus` | optional | `notStarted` / `inProgress` / `completed` / `blocked` / `skipped` |
-
----
-
-#### `POST /update_tasks`
-
-Updates allowed fields on a task document. Immutable fields are rejected.
-
-**Request Body:**
-```json
-{
-  "studentUid": "STU_0001",
-  "taskId": "TASK_001",
-  "courseId": "MATH-S1",
-  "progressStatus": "inProgress",
-  "progressStartedAt": "2026-03-17T09:05:00Z"
-}
-```
-
-**Document lookup priority:**
-1. `scheduledTaskId` (if provided)
-2. `{studentUid}_{courseId}_{taskId}` (fallback)
-
-**Allowed fields (subset):**
-```
-progressStatus, progressStartedAt, progressCompletedAt,
-taskPriority, priorityScore, priorityReasonCodes,
-agentChatSessionId, agentChatStatus, quizInstanceId, ...
-```
-
-**Immutable fields (always rejected):**
-```
-schemaVersion, scheduledTaskId, studentUid,
-courseId, taskId, unitId, lessonId, createdAt, generatedAt
 ```
 
 ---
@@ -191,7 +186,23 @@ Creates a new `ScheduledCourse-1.1` document in the `courses` collection.
 
 **Request Body:** Full `ScheduledCourse-1.1` object.
 
-**Document ID format:** `scheduledCourseId` or `{studentUid}_{courseId}`
+| Field | Type | Required |
+|---|---|---|
+| `schemaVersion` | `"ScheduledCourse-1.1"` | ✅ |
+| `scheduledCourseId` | string | ✅ |
+| `studentUid` | string | ✅ |
+| `courseId` | string | ✅ |
+| `courseName` | string | ✅ |
+| `status` | `planned/active/paused/completed/archived` | ✅ |
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Course created/updated successfully",
+  "docId": "MATH-S1-STU_0001"
+}
+```
 
 ---
 
@@ -200,9 +211,18 @@ Creates a new `ScheduledCourse-1.1` document in the `courses` collection.
 Fetches all course documents for a student.
 
 **Request Body:**
+
+| Field | Type | Required |
+|---|---|---|
+| `studentUid` | string | ✅ |
+
+**Response:**
 ```json
 {
-  "studentUid": "STU_0001"
+  "success": true,
+  "studentUid": "STU_0001",
+  "coursesCount": 2,
+  "courses": [ { ... }, { ... } ]
 }
 ```
 
@@ -210,15 +230,26 @@ Fetches all course documents for a student.
 
 #### `POST /update_course`
 
-Updates allowed fields on a course document with immutable field protection.
+Updates allowed fields on a course document. Immutable fields are rejected.
 
 **Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `studentUid` | string | ✅ | |
+| `courseId` | string | ✅ | |
+| `scheduledTaskId` | string | optional | Use as doc ID directly |
+| any allowed field | — | optional | Fields to update |
+
+**Immutable fields (always rejected):** `studentUid`, `courseId`, `scheduledTaskId`, `schemaVersion`, `createdAt`, `generatedAt`, `taskId`, `unitId`, `lessonId`
+
+**Response:**
 ```json
 {
-  "studentUid": "STU_0001",
-  "courseId": "MATH-S1",
-  "progressStatus": "active",
-  "coursePriorityScore": 85.0
+  "success": true,
+  "docId": "MATH-S1-STU_0001",
+  "updatedFields": ["progressStatus", "updatedAt"],
+  "rejectedFields": []
 }
 ```
 
@@ -231,11 +262,10 @@ Updates allowed fields on a course document with immutable field protection.
 Looks up a student document by email.
 
 **Request Body:**
-```json
-{
-  "email": "student@example.com"
-}
-```
+
+| Field | Type | Required |
+|---|---|---|
+| `email` | string | ✅ |
 
 **Response:**
 ```json
@@ -248,114 +278,276 @@ Looks up a student document by email.
 
 ---
 
-### Running Status
+#### `POST /set_student_profile` 🆕
 
-The `student_running_status` collection tracks a student's **current active state** — which task they are on, what agent is active, etc.
-
-#### `POST /get_student_running_status`
-
-Returns the active running status for a student.
+Saves or updates a student profile. Document ID = `studentUid`.
 
 **Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `studentUid` | string | ✅ | |
+| `profile` | object | optional | Profile fields. If omitted, the full body is used. |
+
+**Profile fields (all optional):**
+
+| Field | Type |
+|---|---|
+| `email` | string |
+| `fullName` | string |
+| `displayName` | string |
+| `dob` | string (YYYY-MM-DD) |
+| `primaryLanguage` | string |
+| `livingLocation` | string |
+| `personaNarrative` | string |
+| `skillsNarrative` | string |
+| `studyConditionsNarrative` | string |
+| `goalsNarrative` | string |
+| `progressAndEngagementNarrative` | string |
+| `needsReminders` | boolean |
+| `needsTutorSupport` | boolean |
+| `needsCoachSupport` | boolean |
+| `needsParentSupport` | boolean |
+| `weeklyStudyMinutesTarget` | integer |
+| `weeklyPracticeMinutesTarget` | integer |
+| `assessmentPassRateTargetPercent` | number |
+
+**Immutable fields (always protected):** `studentUid`, `email`, `createdAt`
+
+**Response:**
 ```json
 {
+  "success": true,
+  "message": "Student profile saved successfully",
   "studentUid": "STU_0001"
 }
 ```
+
+---
+
+### Running Status
+
+Tracks a student's **current active state**. Collection: `student_running_status`. Document ID = `studentUid`.
+
+#### `POST /get_student_running_status`
+
+| Field | Type | Required |
+|---|---|---|
+| `studentUid` | string | ✅ |
 
 **Response:**
 ```json
 {
   "success": true,
   "studentUid": "STU_0001",
-  "runningStatus": {
-    "isActive": true,
-    "activeTaskId": "TASK_001",
-    ...
-  }
+  "runningStatus": { "isActive": true, "activeTaskId": "TASK_001", ... }
 }
 ```
+
+Returns `"runningStatus": null` if no active status found.
 
 ---
 
 #### `POST /set_student_running_status`
 
-Saves or overwrites the running status for a student. Document ID = `studentUid`.
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `studentUid` | string | ✅ | |
+| `runningStatus` | object | optional | If omitted, the full body is used |
 
-**Request Body:**
+**Response:**
 ```json
 {
-  "studentUid": "STU_0001",
-  "runningStatus": {
-    "isActive": true,
-    "activeTaskId": "TASK_001",
-    "activeCourseId": "MATH-S1"
-  }
+  "success": true,
+  "message": "Running status saved successfully",
+  "studentUid": "STU_0001"
 }
 ```
 
 ---
 
-## MCP Server
+### Quizzes
 
-The MCP server (`mcp-server/index.js`) runs on **Cloud Run** and exposes all Cloud Functions as structured AI tools.
+#### `POST /create_quiz` 🆕
 
-**Registered tools:**
+Creates a quiz in the `quizzes` collection. Document ID = `quizInstanceId`.
 
-| Tool | Maps to |
-|---|---|
-| `get_tasks` | `GET_TASKS` |
-| `create_tasks` | `CREATE_TASKS` |
-| `update_task` | `UPDATE_TASK` |
-| `get_course` | `GET_COURSE` |
-| `create_course` | `CREATE_COURSE` |
-| `update_course` | `UPDATE_COURSE` |
-| `get_student` | `GET_STUDENT_BASE` |
-| `upsert_student` | `UPSERT_STUDENT_URL` |
-| `save_course_curriculum` | Direct Firestore write |
-| `get_student_learning_context` | Direct Firestore read |
+**Request Body:**
 
-**Session management:** Each `initialize` request creates a new isolated session with its own transport and MCP server instance. Sessions are cleaned up after 1 hour of inactivity.
+| Field | Type | Required |
+|---|---|---|
+| `quizMeta` | object | ✅ |
+| `quizMeta.quizInstanceId` | string | ✅ |
+| `quizMeta.schemaVersion` | `"generic-1.2"` | ✅ |
+| `quizMeta.assignmentName` | string | ✅ |
+| `quizMeta.quizName` | string | ✅ |
+| `quizMeta.quizSubject` | string | ✅ |
+| `quizMeta.studentEmail` | email string | ✅ |
+| `quizMeta.overallDifficultyLevel` | integer (1–5) | ✅ |
+| `quizMeta.totalNumberOfQuestions` | integer | ✅ |
+| `questions` | array (min 1) | ✅ |
 
-**Allowed origins:**
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Quiz created successfully",
+  "quizInstanceId": "quiz-MATH-S1-STU_0001-W01-v1"
+}
 ```
-https://chatgpt.com
-https://platform.openai.com
+
+---
+
+#### `POST /update_quiz` 🆕
+
+| Field | Type | Required |
+|---|---|---|
+| `quizMeta` | object | ✅ |
+| `quizMeta.quizInstanceId` | string | ✅ |
+| `questions` | array | optional |
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Quiz updated successfully",
+  "updatedFields": ["quizMeta", "updatedAt"]
+}
+```
+
+---
+
+#### `POST /get_quizzes` 🆕
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `quizInstanceId` | string | optional | If provided, returns single quiz |
+| `limit` | integer | optional | Default: `10` (for list mode) |
+
+**Response (single):**
+```json
+{ "success": true, "quiz": { ... } }
+```
+
+**Response (list):**
+```json
+{ "success": true, "count": 5, "quizzes": [ ... ] }
+```
+
+---
+
+#### `POST /create_quiz_answer` 🆕
+
+| Field | Type | Required |
+|---|---|---|
+| `quizInstanceId` | string | ✅ |
+| `studentEmail` | email string | ✅ |
+| `questionAnswers` | array (min 1) | ✅ |
+| `schemaVersion` | string | optional — default: `"QuizAnswers-1.0"` |
+
+**Response:**
+```json
+{ "success": true, "id": "auto-generated-doc-id" }
+```
+
+---
+
+#### `POST /get_quiz_answer` 🆕
+
+| Field | Type | Required |
+|---|---|---|
+| `studentEmail` | string | optional |
+| `quizInstanceId` | string | optional |
+
+**Response:**
+```json
+{ "success": true, "count": 2, "data": [ ... ] }
+```
+
+---
+
+### Flashcards
+
+Same schema as quizzes (`quizMeta` + `questions`). Collection: `flashcards`. Document ID = `quizMeta.quizInstanceId`.
+
+#### `POST /create_flashcard` 🆕
+
+| Field | Type | Required |
+|---|---|---|
+| `quizMeta.quizInstanceId` | string | ✅ |
+| `questions` | array | ✅ |
+
+**Response:** `{ "success": true, "id": "flashcard-set-id" }`
+
+---
+
+#### `POST /update_flashcard` 🆕
+
+| Field | Type | Required |
+|---|---|---|
+| `quizMeta.quizInstanceId` | string | ✅ |
+| `questions` | array | optional |
+
+**Response:** `{ "success": true }`
+
+---
+
+#### `POST /get_flashcard` 🆕
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `quizInstanceId` | string | optional | If omitted, returns all |
+
+**Response (single):** `{ "success": true, "data": { ... } }`
+
+**Response (all):** `{ "success": true, "count": 3, "data": [ ... ] }`
+
+---
+
+### Priority Engine
+
+#### `POST /manual_task_priority_engine` 🆕
+
+Test the priority logic without updating Firestore.
+
+**Request Body:** Any task object with fields like `taskPriority`, `dueAt`, `courseTaskOrder`, `taskAllowSkip`, `taskLateAllowed`.
+
+**Response:**
+```json
+{ "priorityScore": 87, "reasons": ["dueSoon", "lessonSequence"] }
 ```
 
 ---
 
 ## Data Schemas
 
-### `tasks` collection — `StudentSchedule-2.2`
+### `tasks` — `tasksFlatReadable_v1`
 
 | Field | Type | Description |
 |---|---|---|
-| `scheduledTaskId` | string | Unique task ID — `{studentUid}_{courseId}_{taskId}` |
+| `scheduledTaskId` | string | Unique ID |
 | `studentUid` | string | Student identifier |
-| `courseId` | string | Course identifier |
-| `taskType` | enum | `lectureVideo` / `explorationChat` / `quiz` / `reviewPractice` / ... |
-| `taskPriority` | enum | `low` / `normal` / `high` / `urgent` |
-| `progressStatus` | enum | `notStarted` / `inProgress` / `completed` / `blocked` / `skipped` |
-| `priorityScore` | number | 0–100, computed automatically |
-| `priorityReasonCodes` | array | e.g. `["dueSoon", "examSoon"]` |
-| `dueAt` | string (ISO 8601) | Task deadline |
-| `startAt` | string (ISO 8601) | When task becomes available |
+| `scheduledCourseId` | string | Links to course dashboard |
+| `taskType` | string | `speakingPractice` / `quiz` / `practice` / `coachSupport` / ... |
+| `taskStatus` | string | `available` / `inProgress` / `completed` / `paused` / `skipped` |
+| `taskPriority` | string | `low` / `medium` / `high` / `veryHigh` / `urgent` |
+| `priorityScore` | number | 0–100 |
+| `isEligibleNow` | boolean | Can the student start now |
+| `isOverdue` | boolean | Has the deadline passed |
 
-### `courses` collection — `ScheduledCourse-1.1`
+### `courses` — `ScheduledCourse-1.1`
 
 | Field | Type | Description |
 |---|---|---|
-| `scheduledCourseId` | string | Unique course ID — `{courseId}-{studentUid}` |
-| `studentUid` | string | Student identifier |
-| `status` | enum | `planned` / `active` / `paused` / `completed` / `archived` |
-| `courseHealthStatus` | enum | `onTrack` / `watch` / `needsAttention` / `critical` |
+| `scheduledCourseId` | string | Unique course ID |
+| `status` | string | `planned/active/paused/completed/archived` |
+| `courseHealthStatus` | string | `onTrack/watch/needsAttention/critical` |
 | `progressPercentComplete` | number | 0–100 |
-| `overdueStatus` | enum | `ok` / `warning` / `critical` |
+| `overdueStatus` | string | `ok/warning/critical` |
 
-### `courseCurriculum` collection — `Curriculum-1.7`
+### `courseCurriculum` — `Curriculum-1.7`
 
-Document ID = `courseId`. Contains the full curriculum blueprint read by `create_tasks`.
+Document ID = `courseId`. Blueprint read by `create_tasks`.
 
 ```json
 {
@@ -363,15 +555,9 @@ Document ID = `courseId`. Contains the full curriculum blueprint read by `create
   "curriculum": {
     "courseId": "MATH-S1",
     "units": [
-      {
-        "unitId": "UNIT_001",
-        "lessons": [
-          {
-            "lessonId": "LESSON_001",
-            "tasks": [ { "taskId": "TASK_001", ... } ]
-          }
-        ]
-      }
+      { "unitId": "UNIT_001", "lessons": [
+          { "lessonId": "LESSON_001", "tasks": [ { "taskId": "TASK_001", ... } ] }
+      ]}
     ]
   }
 }
@@ -381,17 +567,17 @@ Document ID = `courseId`. Contains the full curriculum blueprint read by `create
 
 ## Priority System
 
-Task priority is calculated automatically via **Firebase Cloud Functions triggers** and a **daily scheduled function**.
-
 ### Formula
 
 ```
 priority_score = (urgency × 0.45) + (importance × 0.35) + (order × 0.15) + (flags × 0.05)
 ```
 
-### Urgency (based on `dueAt`)
+Result × 100, capped at 100.
 
-| Days to deadline | Score |
+### Urgency
+
+| Condition | Score |
 |---|---|
 | Overdue + late NOT allowed | 1.0 |
 | Overdue + late allowed | 0.6 |
@@ -400,22 +586,24 @@ priority_score = (urgency × 0.45) + (importance × 0.35) + (order × 0.15) + (f
 | 6–10 days | 0.6 |
 | 11–14 days | 0.4 |
 | 15+ days | 0.2 |
+| No deadline | 0.2 |
 
-### Importance (based on `taskPriority`)
+### Importance
 
-| Priority | Score |
+| `taskPriority` | Score |
 |---|---|
-| `urgent` (very_critical) | 1.0 → score = 100 immediately |
-| `high` (critical) | 0.8 |
-| `high` | 0.6 |
+| `urgent` | 1.0 → returns **100** immediately |
+| `high` | 0.6–0.8 |
 | `normal` | 0.4 |
 | `low` | 0.2 |
 
-### Triggers
+### Flags
 
-**Scheduled:** Runs daily at **12:00 AM Cairo time** — recalculates all `notStarted` and `inProgress` tasks.
-
-**Real-time:** Fires immediately when `taskPriority`, `dueAt`, or `courseTaskOrder` changes on any task document.
+| Flag | Effect |
+|---|---|
+| `taskAllowSkip = true` | × 0.85 |
+| `taskLateAllowed = true` (not yet overdue) | × 0.90 |
+| Overdue task | +0.05 boost |
 
 ---
 
@@ -426,42 +614,30 @@ priority_score = (urgency × 0.45) + (importance × 0.35) + (order × 0.15) + (f
 firebase deploy --only functions
 
 # Deploy a specific function
-firebase deploy --only functions:create_tasks
+firebase deploy --only functions:create_quiz
 ```
 
 **Runtime:** Python 3.13 (2nd Gen)
 
-**Function URLs after deploy:**
-```
-create_tasks  → https://create-tasks-<hash>-uc.a.run.app
-get_tasks     → https://get-tasks-<hash>-uc.a.run.app
-update_tasks  → https://update-tasks-<hash>-uc.a.run.app
-update_course → https://update-course-<hash>-uc.a.run.app
-create_course → https://us-central1-<project>.cloudfunctions.net/create_course
-get_courses   → https://us-central1-<project>.cloudfunctions.net/get_courses
-```
+### Function URLs
 
----
-
-## Environment Variables
-
-For the **MCP server** (`mcp-server/`):
-
-| Variable | Description |
+| Function | URL |
 |---|---|
-| `PORT` | Server port (default: `8080`) |
-| `UPSTASH_REDIS_REST_URL` | Redis URL for session caching (optional) |
-| `UPSTASH_REDIS_REST_TOKEN` | Redis auth token (optional) |
-| `MCP_DEBUG` | Set to `"1"` to enable verbose session logging |
-| `SESSION_WINDOW_SIZE` | Max messages per session cache (default: `20`) |
-| `SESSION_TTL_SECONDS` | Session cache TTL (default: `86400`) |
-| `DEDUPE_WINDOW_MS` | Duplicate call window in ms (default: `5000`) |
-
----
-
-## Notes
-
-- **Validation:** All update functions filter incoming fields against an `ALLOWED_FIELDS` set. Fields in `IMMUTABLE_FIELDS` are silently rejected and returned in `rejectedFields`.
-- **Batching:** `create_tasks` uses Firestore batch writes for efficiency.
-- **Schema version:** All task documents use `schemaVersion: "StudentSchedule-2.2"`. Course documents use `schemaVersion: "ScheduledCourse-1.1"`.
-- **MCP transport:** Uses `StreamableHTTPServerTransport` — each session is isolated with its own server instance.
+| `create_tasks` | `https://create-tasks-klhq2j3aja-uc.a.run.app` |
+| `get_tasks` | `https://get-tasks-klhq2j3aja-uc.a.run.app` |
+| `create_course` | `https://create-course-klhq2j3aja-uc.a.run.app` |
+| `get_courses` | `https://get-courses-klhq2j3aja-uc.a.run.app` |
+| `update_course` | `https://update-course-klhq2j3aja-uc.a.run.app` |
+| `get_student_profile` | `https://get-student-profile-klhq2j3aja-uc.a.run.app` |
+| `set_student_profile` | `https://set-student-profile-klhq2j3aja-uc.a.run.app` |
+| `get_student_running_status` | `https://get-student-running-status-klhq2j3aja-uc.a.run.app` |
+| `set_student_running_status` | `https://set-student-running-status-klhq2j3aja-uc.a.run.app` |
+| `manual_task_priority_engine` | `https://manual-task-priority-engine-klhq2j3aja-uc.a.run.app` |
+| `create_quiz` | `https://us-central1-ai-students-85242.cloudfunctions.net/create_quiz` |
+| `update_quiz` | `https://us-central1-ai-students-85242.cloudfunctions.net/update_quiz` |
+| `get_quizzes` | `https://us-central1-ai-students-85242.cloudfunctions.net/get_quizzes` |
+| `create_quiz_answer` | `https://us-central1-ai-students-85242.cloudfunctions.net/create_quiz_answer` |
+| `get_quiz_answer` | `https://us-central1-ai-students-85242.cloudfunctions.net/get_quiz_answer` |
+| `create_flashcard` | `https://us-central1-ai-students-85242.cloudfunctions.net/create_flashcard` |
+| `update_flashcard` | `https://us-central1-ai-students-85242.cloudfunctions.net/update_flashcard` |
+| `get_flashcard` | `https://us-central1-ai-students-85242.cloudfunctions.net/get_flashcard` |
