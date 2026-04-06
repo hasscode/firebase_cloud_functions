@@ -99,9 +99,9 @@ def create_quiz(req: https_fn.Request) -> https_fn.Response:
 
 @https_fn.on_request()
 def create_course(req: https_fn.Request) -> https_fn.Response:
-    from src.create_course import createCourse
+    from src.create_course import create_course
     db = firestore.client()
-    return createCourse(req, db)
+    return create_course(req, db)
 
 @https_fn.on_request()
 def update_course(req: https_fn.Request) -> https_fn.Response:
@@ -143,8 +143,13 @@ def set_student_profile(req: https_fn.Request) -> https_fn.Response:
 def get_quiz_with_flashcards(req: https_fn.Request) -> https_fn.Response:
     from src.get_quiz_with_flashcards import getQuizAndFlashcards
     db = firestore.client()
-    return getQuizAndFlashcards(req, db)       
+    return getQuizAndFlashcards(req, db)     
 
+@https_fn.on_request()
+def memory_upload_to_vector_store(req: https_fn.Request) -> https_fn.Response:
+    from src.memory_upload_to_vector_store import upload_to_vector_store
+    db = firestore.client()
+    return upload_to_vector_store(req, db)  
 
 # دالة يدوية لتجربة محرك الأولويات عبر HTTP (اختياري)
 @https_fn.on_request()
