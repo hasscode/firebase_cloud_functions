@@ -1,6 +1,7 @@
 # Python bytecode
 __pycache__/
 serviceAccountKey.json
+openai_key.txt
 # Python virtual environment
 venv/
 *.local

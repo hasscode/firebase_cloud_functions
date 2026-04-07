@@ -86,7 +86,7 @@ def create_course(req, db: firestore.Client):
         
         doc_id = f"summary_{student_uid}"
 
-        doc_ref = db.collection("student_courses_summaries").document(doc_id)
+        doc_ref = db.collection("courses").document(doc_id)
         doc = doc_ref.get()
 
         payload = {**data, "updatedAt": firestore.SERVER_TIMESTAMP}
@@ -98,7 +98,7 @@ def create_course(req, db: firestore.Client):
 
         return jsonify({
             "success": True,
-            "message": "Student courses summary created/updated successfully",
+            "message": "Student courses created/updated successfully",
             "docId": doc_id,
             "studentUid": student_uid
         })

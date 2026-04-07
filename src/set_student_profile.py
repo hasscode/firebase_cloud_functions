@@ -29,6 +29,7 @@ def set_student_profile(req, db: firestore.Client):
 
         payload = {
             **clean_profile,
+            "email": data.get("email"),
             "studentUid": student_uid,
             "updatedAt": firestore.SERVER_TIMESTAMP
         }

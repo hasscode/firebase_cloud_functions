@@ -145,11 +145,11 @@ def get_quiz_with_flashcards(req: https_fn.Request) -> https_fn.Response:
     db = firestore.client()
     return getQuizAndFlashcards(req, db)     
 
-@https_fn.on_request()
+@https_fn.on_request(secrets=["MEMORY_CONVERSATION_OPENAI_API_KEY"])
 def memory_upload_to_vector_store(req: https_fn.Request) -> https_fn.Response:
     from src.memory_upload_to_vector_store import upload_to_vector_store
     db = firestore.client()
-    return upload_to_vector_store(req, db)  
+    return upload_to_vector_store(req)  
 
 # دالة يدوية لتجربة محرك الأولويات عبر HTTP (اختياري)
 @https_fn.on_request()
