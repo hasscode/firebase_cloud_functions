@@ -165,7 +165,7 @@ Uploads or updates a course curriculum blueprint.
 | `curriculum.courseId` | String | Yes | Unique ID for the course. |
 
 **Response Schema:**
-- **Success Case (210):** `{"success": true, "courseId": "..."}`
+- **Success Case (200):** `{"success": true, "courseId": "..."}`
 
 ---
 
