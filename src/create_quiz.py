@@ -1,48 +1,41 @@
 from flask import jsonify
 from google.cloud import firestore
 
-
-def getQuizzes(req, db: firestore.Client):
+def createQuiz(req, db: firestore.Client):
     try:
-        data = req.get_json(silent=True) or {}
+        data = req.get_json()
 
-        quiz_id = data.get("quizInstanceId")
+        if not data:
+            return jsonify({"error": "Missing request body"}), 400
 
-       
-        if quiz_id:
-            doc = db.collection("quizzes").document(quiz_id).get()
+        quiz_meta = data.get("quizMeta")
+        questions = data.get("questions")
 
-            if not doc.exists:
-                return jsonify({"error": "Quiz not found"}), 404
+        if not quiz_meta or not questions:
+            return jsonify({"error": "quizMeta and questions are required"}), 400
 
-            doc_data = doc.to_dict()
+        quiz_id = quiz_meta.get("quizInstanceId")
 
-            return jsonify({
-                "success": True,
-                "quizInstanceId": quiz_id,
-                "quiz": doc_data.get("quiz", {})  # 👈 رجع الـ JSON زي ما هو
-            })
+        if not quiz_id:
+            return jsonify({"error": "quizInstanceId is required"}), 400
 
-        # =========================
-        # 🔹 Get list of quizzes
-        # =========================
-        limit = data.get("limit", 10)
+        doc_ref = db.collection("quizzes").document(quiz_id)
 
-        docs = db.collection("quizzes").limit(limit).stream()
-
-        quizzes = []
-        for doc in docs:
-            d = doc.to_dict()
-
-            quizzes.append({
-                "quizInstanceId": d.get("quizInstanceId"),
-                "quiz": d.get("quiz", {})
-            })
+        # 👇 التعديل هنا
+        doc_ref.set({
+            "quizInstanceId": quiz_id,
+            "quiz": {   # 🔥 كله متحط هنا
+                "quizMeta": quiz_meta,
+                "questions": questions
+            },
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP
+        })
 
         return jsonify({
             "success": True,
-            "count": len(quizzes),
-            "quizzes": quizzes
+            "message": "Quiz created successfully",
+            "quizInstanceId": quiz_id
         })
 
     except Exception as e:

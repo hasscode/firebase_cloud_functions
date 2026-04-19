@@ -1,71 +1,58 @@
 from flask import jsonify
 from google.cloud import firestore
 
-
-def getTasks(req, db):
+def getTasks(req, db: firestore.Client):
     try:
         data = req.get_json(silent=True) or {}
-
         student_uid = data.get("studentUid")
-        course_id   = data.get("courseId")
-        status      = data.get("progressStatus")
-
-        deprioritize_optional = data.get("deprioritizeOptionalTasks", False)
+        course_id = data.get("courseId")
+        # الـ Statuses المتوافقة مع الـ Schema
+        statuses = data.get("progressStatus", ["notStarted", "inProgress"])
         limit = data.get("limit")
 
         if not student_uid:
             return jsonify({"error": "studentUid is required"}), 400
 
-        # 1️⃣ Query
+        # 1. Query الأساسي
         query = db.collection("tasks").where("studentUid", "==", student_uid)
 
         if course_id:
             query = query.where("scheduledCourseId", "==", course_id)
 
-        if status:
-            query = query.where("taskStatus", "==", status)
+        # فلترة الـ Status (Firestore بيقبل "in" للـ lists)
+        if isinstance(statuses, list) and len(statuses) > 0:
+            query = query.where("taskStatus", "in", statuses)
 
         docs = query.stream()
+        tasks_list = []
 
-        tasks = []
         for doc in docs:
-            task = doc.to_dict()
-            task["id"] = doc.id
-            tasks.append(task)
+            task_data = doc.to_dict()
+            tasks_list.append(task_data)
 
-        # 2️⃣ Sorting logic
-        def sort_key(task):
-            priority = task.get("taskPriority", "").lower()
-            is_optional = task.get("isOptional", False)
+        # 2. Sorting Logic (محرك الأولوية لـ Boraq)
+        def sort_key(t):
+            # ترتيب الـ Priority حسب الـ Schema
+            priority_map = {
+                "veryHigh": 0, "high": 1, "medium": 2, 
+                "low": 3, "veryLow": 4
+            }
+            p_val = priority_map.get(t.get("taskPriority"), 2)
+            score = t.get("priorityScore", 0)
+            
+            # بنرتب بالـ Priority الأول، وبعدين الـ Score الأعلى (Descending)
+            return (p_val, -score)
 
-            order = task.get("courseTaskOrder", 9999)
-            task_id = task.get("scheduledTaskId", "")
+        tasks_list.sort(key=sort_key)
 
-           
-            is_critical = priority in ["critical", "verycritical"]
-
-       
-            if is_critical:
-                bucket = 0
-            elif deprioritize_optional and is_optional:
-                bucket = 2
-            else:
-                bucket = 1
-
-       
-            return (bucket, order, task_id)
-
-        tasks.sort(key=sort_key)
-
-        # 3️⃣ Limit
         if limit:
-            tasks = tasks[:limit]
+            tasks_list = tasks_list[:limit]
 
+        # الرد مطابق للـ Schema النهائية
         return jsonify({
-            "success": True,
-            "tasksCount": len(tasks),
-            "tasks": tasks
-        })
+            "schemaVersion": "priorityTasksFlatReadable_v1",
+            "tasks": tasks_list
+        }), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

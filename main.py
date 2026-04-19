@@ -29,13 +29,27 @@ if not firebase_admin._apps:
 def get_tasks(req: https_fn.Request) -> https_fn.Response:
     from src.get_tasks import getTasks
     db = firestore.client()
+ 
     return getTasks(req, db)
 
-# @https_fn.on_request()
-# def update_tasks(req: https_fn.Request) -> https_fn.Response:
-#     from src.update_task import upsertStudentTask
-#     db = firestore.client()
-#     return upsertStudentTask(req, db)
+@https_fn.on_request()
+def get_task(req: https_fn.Request) -> https_fn.Response:
+    from src.get_task import getTask
+    db = firestore.client()
+ 
+    return getTask(req, db)   
+ 
+@https_fn.on_request()
+def create_curriculum(req: https_fn.Request) -> https_fn.Response:
+    from src.create_curriculum import upload_curriculum
+    db = firestore.client()
+    return upload_curriculum(req, db)
+
+@https_fn.on_request()
+def update_tasks(req: https_fn.Request) -> https_fn.Response:
+    from src.update_tasks import update_task
+    db = firestore.client()
+    return update_task(req, db)
 
 @https_fn.on_request()
 def get_courses(req: https_fn.Request) -> https_fn.Response:
